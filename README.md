@@ -10,6 +10,7 @@ This repository is a React + Vite frontend for a pizza ordering experience with 
 - `npm run dev` starts the Vite development server.
 - `npm run build` creates the production bundle for deployment.
 - `npm run preview` serves the built output locally for a final check.
+- The current UI keeps draft cart state and the last successful order in browser `localStorage` for a preview-only experience. That persistence is intentionally local to the browser session and is not shared across teammates or devices.
 
 ## Project structure
 

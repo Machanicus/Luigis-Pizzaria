@@ -1,6 +1,11 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import pizzaGraphic from './assets/pizza.svg'
 import './App.css'
+
+const STORAGE_KEY = 'luigis-pizzaria-order-state'
+// A small browser-only order history snapshot for preview flow reuse.
+// This persists only in the browser that opens the app and is not shared across users.
+const HISTORY_KEY = 'luigis-pizzaria-order-history'
 
 // Menu data is kept in one place so the UI, pricing, and cart stay in sync.
 const pizzaMenu = [
@@ -45,6 +50,11 @@ const toppings = [
 ]
 
 const formatPrice = (value) => `$${Number(value).toFixed(2)}`
+
+const promoCodeMap = {
+  SAVE10: 0.1,
+  PIZZA15: 0.15,
+}
 
 const toppingPriceLookup = new Map(toppings.map((topping) => [topping.id, topping.price]))
 const toppingLabelLookup = new Map(toppings.map((topping) => [topping.id, topping.label]))
@@ -156,6 +166,7 @@ function ReviewModal({
   taxAmount,
   deliveryFee,
   gratuityAmount,
+  discountAmount,
   orderTotal,
   paymentMethodLabel,
   onClose,
@@ -225,6 +236,10 @@ function ReviewModal({
               <span>{formatPrice(isCarryout ? 0 : deliveryFee)}</span>
             </div>
             <div className="review-total-row">
+              <span>Discount</span>
+              <span>{formatPrice(discountAmount)}</span>
+            </div>
+            <div className="review-total-row">
               <span>Gratuity</span>
               <span>{formatPrice(gratuityAmount)}</span>
             </div>
@@ -269,6 +284,9 @@ function OrderSummaryCard({
   phone,
   orderType,
   paymentMethod,
+  orderNotes,
+  promoCode,
+  promoCodeStatus,
   showGratuityInput,
   gratuityInput,
   validationMessage,
@@ -278,19 +296,23 @@ function OrderSummaryCard({
   taxAmount,
   gratuityAmount,
   deliveryFee,
+  discountAmount,
   orderTotal,
   deliveryEstimate,
-  estimatedWaitTime,
   isCarryout,
+  lastOrder,
   onUpdateCustomerName,
   onUpdateAddress,
   onUpdatePhone,
+  onUpdateOrderNotes,
+  onUpdatePromoCode,
   onSetOrderType,
   onSetPaymentMethod,
   onToggleGratuityInput,
   onPresetGratuity,
   onUpdateGratuityInput,
   onPlaceOrder,
+  onRestoreLastOrder,
 }) {
   return (
     <div className="summary-card">
@@ -350,7 +372,39 @@ function OrderSummaryCard({
             placeholder="(555) 555-1234"
           />
         </label>
+
+        <label className="notes-field">
+          <span>Order notes</span>
+          <textarea
+            rows="3"
+            value={orderNotes}
+            onChange={(event) => onUpdateOrderNotes(event.target.value)}
+            placeholder="Delivery notes, allergy info, or timing requests"
+          />
+        </label>
+
+        <label className="promo-code-field">
+          <span>Promo code</span>
+          <input
+            type="text"
+            value={promoCode}
+            onChange={(event) => onUpdatePromoCode(event.target.value.toUpperCase())}
+            placeholder="Enter SAVE10 or PIZZA15"
+          />
+        </label>
+        {promoCodeStatus && (
+          <p className={`promo-feedback ${promoCodeStatus.type}`}>{promoCodeStatus.message}</p>
+        )}
       </div>
+
+      {lastOrder && (
+        <div className="recent-order-card">
+          <span>Recent order saved</span>
+          <button type="button" className="secondary repeat-button" onClick={onRestoreLastOrder}>
+            Repeat last order
+          </button>
+        </div>
+      )}
 
       {validationMessage && (
         <div className="validation-banner" role="alert">
@@ -434,6 +488,10 @@ function OrderSummaryCard({
           <span>{formatPrice(isCarryout ? 0 : deliveryFee)}</span>
         </div>
         <div className="breakdown-item">
+          <span>Discount</span>
+          <span>{formatPrice(discountAmount)}</span>
+        </div>
+        <div className="breakdown-item">
           <span>Gratuity</span>
           <span>{formatPrice(gratuityAmount)}</span>
         </div>
@@ -445,7 +503,7 @@ function OrderSummaryCard({
         onClick={onPlaceOrder}
         disabled={!paymentMethod}
       >
-        Place order
+        Review order
       </button>
     </div>
   )
@@ -463,7 +521,67 @@ function App() {
   const [showOrderReview, setShowOrderReview] = useState(false)
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [validationMessage, setValidationMessage] = useState('')
+  const [orderNotes, setOrderNotes] = useState('')
+  const [promoCode, setPromoCode] = useState('')
+  const [lastOrder, setLastOrder] = useState(null)
   const gratuityPercentageOptions = [5, 10, 15]
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (!saved) {
+        return
+      }
+
+      const parsed = JSON.parse(saved)
+      if (parsed.cart) setCart(parsed.cart)
+      if (parsed.customerName) setCustomerName(parsed.customerName)
+      if (parsed.address) setAddress(parsed.address)
+      if (parsed.phone) setPhone(parsed.phone)
+      if (parsed.orderType) setOrderType(parsed.orderType)
+      if (parsed.paymentMethod) setPaymentMethod(parsed.paymentMethod)
+      if (parsed.gratuityInput) setGratuityInput(parsed.gratuityInput)
+      if (parsed.orderNotes) setOrderNotes(parsed.orderNotes)
+      if (parsed.promoCode) setPromoCode(parsed.promoCode)
+    } catch {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+
+    try {
+      const history = localStorage.getItem(HISTORY_KEY)
+      if (!history) {
+        return
+      }
+
+      const parsedHistory = JSON.parse(history)
+      if (Array.isArray(parsedHistory) && parsedHistory.length > 0) {
+        setLastOrder(parsedHistory[0])
+      }
+    } catch {
+      localStorage.removeItem(HISTORY_KEY)
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          cart,
+          customerName,
+          address,
+          phone,
+          orderType,
+          paymentMethod,
+          gratuityInput,
+          orderNotes,
+          promoCode,
+        }),
+      )
+    } catch {
+      // Ignore browser storage quota issues and keep the checkout flow functional.
+    }
+  }, [address, cart, customerName, gratuityInput, orderNotes, orderType, paymentMethod, phone, promoCode])
 
   const addToCart = useCallback((pizza) => {
     setCart((current) => {
@@ -499,6 +617,35 @@ function App() {
     setCart((current) => current.filter((item) => item.id !== id))
   }, [])
 
+  const clearCart = useCallback(() => {
+    if (cart.length === 0) {
+      return
+    }
+
+    if (window.confirm('Clear your cart?')) {
+      setCart([])
+      setValidationMessage('')
+    }
+  }, [cart.length])
+
+  const restoreLastOrder = useCallback(() => {
+    if (!lastOrder) {
+      return
+    }
+
+    setCart(lastOrder.cart)
+    setCustomerName(lastOrder.customerName)
+    setAddress(lastOrder.address)
+    setPhone(lastOrder.phone)
+    setOrderType(lastOrder.orderType)
+    setPaymentMethod(lastOrder.paymentMethod)
+    setGratuityInput(lastOrder.gratuityInput)
+    setOrderNotes(lastOrder.orderNotes)
+    setPromoCode(lastOrder.promoCode)
+    setShowGratuityInput(Boolean(lastOrder.gratuityInput))
+    setValidationMessage('')
+  }, [lastOrder])
+
   const deliveryFee = 4
 
   const getSalesTaxRate = (addressValue) => {
@@ -524,10 +671,34 @@ function App() {
   const salesTaxRate = useMemo(() => getSalesTaxRate(address), [address])
   const taxAmount = useMemo(() => itemTotal * salesTaxRate, [itemTotal, salesTaxRate])
   const gratuityAmount = useMemo(() => Math.max(0, Number(gratuityInput) || 0), [gratuityInput])
+  const promoDiscountRate = useMemo(() => {
+    const normalized = promoCode.trim().toUpperCase()
+    return promoCodeMap[normalized] || 0
+  }, [promoCode])
+  const promoCodeStatus = useMemo(() => {
+    const normalized = promoCode.trim().toUpperCase()
+
+    if (!normalized) {
+      return null
+    }
+
+    if (promoCodeMap[normalized]) {
+      return {
+        type: 'success',
+        message: `Promo applied: ${normalized}`,
+      }
+    }
+
+    return {
+      type: 'error',
+      message: 'Promo code not recognized. Try SAVE10 or PIZZA15.',
+    }
+  }, [promoCode])
+  const discountAmount = useMemo(() => itemTotal * promoDiscountRate, [itemTotal, promoDiscountRate])
   const isCarryout = orderType === 'carryout'
   const orderTotal = useMemo(
-    () => itemTotal + taxAmount + (isCarryout ? 0 : deliveryFee) + gratuityAmount,
-    [itemTotal, taxAmount, isCarryout, deliveryFee, gratuityAmount],
+    () => itemTotal + taxAmount + (isCarryout ? 0 : deliveryFee) + gratuityAmount - discountAmount,
+    [itemTotal, taxAmount, isCarryout, deliveryFee, gratuityAmount, discountAmount],
   )
 
   const totalPizzas = useMemo(
@@ -578,6 +749,27 @@ function App() {
   }, [address, cart.length, customerName, isCarryout, paymentMethod, phone])
 
   const confirmOrder = useCallback(() => {
+    const orderSnapshot = {
+      cart,
+      customerName,
+      address,
+      phone,
+      orderType,
+      paymentMethod,
+      gratuityInput,
+      orderNotes,
+      promoCode,
+    }
+
+    try {
+      const currentHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]')
+      const nextHistory = [orderSnapshot, ...currentHistory].slice(0, 3)
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory))
+      setLastOrder(orderSnapshot)
+    } catch {
+      // Ignore storage errors and continue with the success handoff.
+    }
+
     setShowOrderReview(false)
     setShowSuccessMessage(true)
     setCart([])
@@ -587,9 +779,11 @@ function App() {
     setOrderType('delivery')
     setPaymentMethod('')
     setGratuityInput('')
+    setOrderNotes('')
+    setPromoCode('')
     setShowGratuityInput(false)
     setValidationMessage('')
-  }, [])
+  }, [address, cart, customerName, gratuityInput, orderNotes, orderType, paymentMethod, phone, promoCode])
 
   const paymentMethodLabel = {
     paypal: 'PayPal',
@@ -646,14 +840,23 @@ function App() {
         </section>
 
         <section className="cart-panel">
-          <div className="panel-header">
-            <h2>Your order</h2>
-            <p>{cart.length ? `${cart.length} item(s) in cart` : 'Cart is empty'}</p>
+          <div className="panel-header panel-header-inline">
+            <div>
+              <h2>Your order</h2>
+              <p>{cart.length ? `${cart.length} item(s) in cart` : 'Cart is empty'}</p>
+            </div>
+            {cart.length > 0 && (
+              <button type="button" className="clear-cart-button" onClick={clearCart}>
+                Clear cart
+              </button>
+            )}
           </div>
 
           <div className="cart-list">
             {cart.length === 0 && (
-              <p className="empty-state">Start by adding a pizza from the menu.</p>
+              <p className="empty-state">
+                Start by adding a pizza from the menu to begin your order.
+              </p>
             )}
 
             {cart.map((item) => (
@@ -672,6 +875,9 @@ function App() {
             phone={phone}
             orderType={orderType}
             paymentMethod={paymentMethod}
+            orderNotes={orderNotes}
+            promoCode={promoCode}
+            promoCodeStatus={promoCodeStatus}
             showGratuityInput={showGratuityInput}
             gratuityInput={gratuityInput}
             validationMessage={validationMessage}
@@ -681,9 +887,11 @@ function App() {
             taxAmount={taxAmount}
             gratuityAmount={gratuityAmount}
             deliveryFee={deliveryFee}
+            discountAmount={discountAmount}
             orderTotal={orderTotal}
             deliveryEstimate={deliveryEstimate}
             isCarryout={isCarryout}
+            lastOrder={lastOrder}
             onUpdateCustomerName={(value) => {
               setCustomerName(value)
               setValidationMessage('')
@@ -696,6 +904,8 @@ function App() {
               setPhone(value)
               setValidationMessage('')
             }}
+            onUpdateOrderNotes={(value) => setOrderNotes(value)}
+            onUpdatePromoCode={(value) => setPromoCode(value)}
             onSetOrderType={(value) => setOrderType(value)}
             onSetPaymentMethod={(value) => setPaymentMethod(value)}
             onToggleGratuityInput={() => setShowGratuityInput((current) => !current)}
@@ -705,6 +915,7 @@ function App() {
             }}
             onUpdateGratuityInput={(value) => setGratuityInput(value)}
             onPlaceOrder={handlePlaceOrder}
+            onRestoreLastOrder={restoreLastOrder}
           />
         </section>
       </section>
