@@ -106,6 +106,22 @@
   color: var(--text-h);
 }
 
+.panel-header-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.clear-cart-button {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .menu-panel,
 .cart-panel {
   display: flex;
@@ -212,12 +228,18 @@
 
 .item-controls select,
 .item-controls input,
-.checkout-form input {
+.checkout-form input,
+.checkout-form textarea {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 10px 14px;
   background: var(--panel);
   color: var(--text-h);
+}
+
+.checkout-form textarea {
+  resize: vertical;
+  min-height: 88px;
 }
 
 .toppings-group {
@@ -366,6 +388,41 @@
   color: rgba(0, 0, 0, 0.45);
 }
 
+.promo-feedback {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.promo-feedback.success {
+  color: #0c7a43;
+}
+
+.promo-feedback.error {
+  color: #a63a12;
+}
+
+.recent-order-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  color: var(--text-h);
+}
+
+.recent-order-card span {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.repeat-button {
+  width: auto;
+  min-width: 160px;
+}
+
 .validation-banner {
   display: grid;
   gap: 6px;
@@ -389,6 +446,21 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin: 20px 0 4px;
+}
+
+.payment-pill {
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.payment-pill.active {
+  background: var(--accent);
+  color: white;
 }
 
 .gratuity-row {
@@ -652,7 +724,30 @@
     padding: 20px;
   }
 
-  .item-controls {
+  .panel-header-inline,
+  .review-actions,
+  .summary-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .item-controls,
+  .payment-method-toggle {
     grid-template-columns: 1fr;
+  }
+
+  .toggle-pill,
+  .payment-pill,
+  .gratuity-button,
+  .gratuity-preset {
+    width: 100%;
+  }
+
+  .order-type-toggle {
+    grid-template-columns: 1fr;
+  }
+
+  .toggle-separator {
+    display: none;
   }
 }
