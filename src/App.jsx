@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import pizzaGraphic from './assets/pizza.svg'
 import './App.css'
 
+// Menu data is kept in one place so the UI, pricing, and cart stay in sync.
 const pizzaMenu = [
   {
     id: 'margherita',
@@ -35,6 +36,7 @@ const sizeModifiers = {
   large: 4,
 }
 
+// Static lookup tables avoid repeated array scans during render and cart updates.
 const toppings = [
   { id: 'extra-cheese', label: 'Extra cheese', price: 1 },
   { id: 'sausage', label: 'Italian sausage', price: 1.5 },
@@ -42,7 +44,412 @@ const toppings = [
   { id: 'mushrooms', label: 'Mushrooms', price: 0.9 },
 ]
 
-const formatPrice = (value) => `$${value.toFixed(2)}`
+const formatPrice = (value) => `$${Number(value).toFixed(2)}`
+
+const toppingPriceLookup = new Map(toppings.map((topping) => [topping.id, topping.price]))
+const toppingLabelLookup = new Map(toppings.map((topping) => [topping.id, topping.label]))
+
+const getItemLineTotal = (item) => {
+  const base = item.pizza.price + sizeModifiers[item.size]
+  const toppingsTotal = item.toppings.reduce(
+    (sum, toppingId) => sum + (toppingPriceLookup.get(toppingId) || 0),
+    0,
+  )
+
+  return (base + toppingsTotal) * item.quantity
+}
+
+function MenuCard({ pizza, onAddToCart }) {
+  return (
+    <article className="menu-card">
+      <div>
+        <h3>{pizza.name}</h3>
+        <p className="menu-description">{pizza.description}</p>
+      </div>
+      <div className="card-footer">
+        <span className="price">{formatPrice(pizza.price)}</span>
+        <button type="button" onClick={() => onAddToCart(pizza)}>
+          Add
+        </button>
+      </div>
+    </article>
+  )
+}
+
+function CartItemCard({ item, onUpdateItem, onRemoveItem }) {
+  const itemLineTotal = getItemLineTotal(item)
+
+  return (
+    <div className="cart-item">
+      <div className="item-main">
+        <div>
+          <h3>{item.pizza.name}</h3>
+          <p>{formatPrice(itemLineTotal)}</p>
+        </div>
+        <button type="button" className="remove" onClick={() => onRemoveItem(item.id)}>
+          Remove
+        </button>
+      </div>
+
+      <div className="item-controls">
+        <label>
+          Size
+          <select
+            value={item.size}
+            onChange={(event) => onUpdateItem(item.id, { size: event.target.value })}
+          >
+            {Object.keys(sizeModifiers).map((size) => (
+              <option key={size} value={size}>
+                {size.charAt(0).toUpperCase() + size.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Quantity
+          <input
+            type="number"
+            min="1"
+            value={item.quantity}
+            onChange={(event) =>
+              onUpdateItem(item.id, {
+                quantity: Math.max(1, Number(event.target.value) || 1),
+              })
+            }
+          />
+        </label>
+      </div>
+
+      <fieldset className="toppings-group">
+        <legend>Extra toppings</legend>
+        {toppings.map((topping) => (
+          <label key={topping.id} className="topping-option">
+            <input
+              type="checkbox"
+              checked={item.toppings.includes(topping.id)}
+              onChange={(event) => {
+                const selected = event.target.checked
+                onUpdateItem(item.id, {
+                  toppings: selected
+                    ? [...item.toppings, topping.id]
+                    : item.toppings.filter((id) => id !== topping.id),
+                })
+              }}
+            />
+            <span>{topping.label}</span>
+            <small>{formatPrice(topping.price)}</small>
+          </label>
+        ))}
+      </fieldset>
+    </div>
+  )
+}
+
+function ReviewModal({
+  customerName,
+  phone,
+  address,
+  isCarryout,
+  cart,
+  itemTotal,
+  taxAmount,
+  deliveryFee,
+  gratuityAmount,
+  orderTotal,
+  paymentMethodLabel,
+  onClose,
+  onConfirm,
+}) {
+  return (
+    <div className="review-modal-backdrop" role="presentation">
+      <div className="review-modal" role="dialog" aria-modal="true">
+        <div className="review-modal-header">
+          <div>
+            <p className="eyebrow">Review order</p>
+            <h2>Please verify your details</h2>
+          </div>
+          <button type="button" className="review-close" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="review-sections">
+          <section>
+            <h3>Customer</h3>
+            <p>{customerName || 'No name provided'}</p>
+            <p>{phone || 'No phone provided'}</p>
+            {!isCarryout && <p>{address || 'No address provided'}</p>}
+          </section>
+
+          <section>
+            <h3>Order</h3>
+            <div className="review-items">
+              {cart.map((item) => (
+                <div key={item.id} className="review-item">
+                  <div>
+                    <strong>{item.quantity} × {item.pizza.name}</strong>
+                    <p>{item.size} size</p>
+                    {item.toppings.length > 0 && (
+                      <p>
+                        {item.toppings
+                          .map((toppingId) => toppingLabelLookup.get(toppingId))
+                          .join(', ')}
+                      </p>
+                    )}
+                  </div>
+                  <span>{formatPrice(getItemLineTotal(item))}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3>Payment</h3>
+            <p>{paymentMethodLabel}</p>
+            <p>{isCarryout ? 'Carryout' : 'Delivery'}</p>
+          </section>
+
+          <section>
+            <h3>Totals</h3>
+            <div className="review-total-row">
+              <span>Items</span>
+              <span>{formatPrice(itemTotal)}</span>
+            </div>
+            <div className="review-total-row">
+              <span>Sales tax</span>
+              <span>{formatPrice(taxAmount)}</span>
+            </div>
+            <div className="review-total-row">
+              <span>Delivery fee</span>
+              <span>{formatPrice(isCarryout ? 0 : deliveryFee)}</span>
+            </div>
+            <div className="review-total-row">
+              <span>Gratuity</span>
+              <span>{formatPrice(gratuityAmount)}</span>
+            </div>
+            <div className="review-total-row total">
+              <span>Order total</span>
+              <span>{formatPrice(orderTotal)}</span>
+            </div>
+          </section>
+        </div>
+
+        <div className="review-actions">
+          <button type="button" className="secondary review-cancel" onClick={onClose}>
+            Back
+          </button>
+          <button type="button" className="primary review-confirm" onClick={onConfirm}>
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SuccessModal({ estimatedWaitTime, onClose }) {
+  return (
+    <div className="review-modal-backdrop" role="presentation">
+      <div className="success-modal" role="dialog" aria-modal="true">
+        <p className="eyebrow">Luigi's Pizzaria</p>
+        <h2>Thank you!</h2>
+        <p className="success-message">Your order will be ready in {estimatedWaitTime}.</p>
+        <button type="button" className="primary" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function OrderSummaryCard({
+  customerName,
+  address,
+  phone,
+  orderType,
+  paymentMethod,
+  showGratuityInput,
+  gratuityInput,
+  validationMessage,
+  gratuityPercentageOptions,
+  itemTotal,
+  salesTaxRate,
+  taxAmount,
+  gratuityAmount,
+  deliveryFee,
+  orderTotal,
+  deliveryEstimate,
+  estimatedWaitTime,
+  isCarryout,
+  onUpdateCustomerName,
+  onUpdateAddress,
+  onUpdatePhone,
+  onSetOrderType,
+  onSetPaymentMethod,
+  onToggleGratuityInput,
+  onPresetGratuity,
+  onUpdateGratuityInput,
+  onPlaceOrder,
+}) {
+  return (
+    <div className="summary-card">
+      <div className="summary-card-header">
+        <div>
+          <p className="summary-label">Order total</p>
+          <p className="summary-subtitle">{deliveryEstimate}</p>
+        </div>
+        <strong>{formatPrice(orderTotal)}</strong>
+      </div>
+
+      <div className="order-type-toggle">
+        <button
+          type="button"
+          className={isCarryout ? 'toggle-pill' : 'toggle-pill active'}
+          onClick={() => onSetOrderType('delivery')}
+        >
+          Delivery
+        </button>
+        <span className="toggle-separator">OR</span>
+        <button
+          type="button"
+          className={isCarryout ? 'toggle-pill active' : 'toggle-pill'}
+          onClick={() => onSetOrderType('carryout')}
+        >
+          Carryout
+        </button>
+      </div>
+
+      <div className="checkout-form">
+        <label>
+          <span>Name</span>
+          <input
+            type="text"
+            value={customerName}
+            onChange={(event) => onUpdateCustomerName(event.target.value)}
+            placeholder="Enter your name"
+          />
+        </label>
+        {!isCarryout && (
+          <label>
+            <span>Delivery address</span>
+            <input
+              type="text"
+              value={address}
+              onChange={(event) => onUpdateAddress(event.target.value)}
+              placeholder="Enter delivery address"
+            />
+          </label>
+        )}
+        <label>
+          <span>Phone</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(event) => onUpdatePhone(event.target.value)}
+            placeholder="(555) 555-1234"
+          />
+        </label>
+      </div>
+
+      {validationMessage && (
+        <div className="validation-banner" role="alert">
+          <span className="validation-title">Luigi's Pizzaria</span>
+          <span>{validationMessage}</span>
+        </div>
+      )}
+
+      <div className="payment-method-toggle">
+        <button
+          type="button"
+          className={paymentMethod === 'paypal' ? 'payment-pill active' : 'payment-pill'}
+          onClick={() => onSetPaymentMethod('paypal')}
+        >
+          PayPal
+        </button>
+        <button
+          type="button"
+          className={paymentMethod === 'credit' ? 'payment-pill active' : 'payment-pill'}
+          onClick={() => onSetPaymentMethod('credit')}
+        >
+          Credit card
+        </button>
+        <button
+          type="button"
+          className={paymentMethod === 'affirm' ? 'payment-pill active' : 'payment-pill'}
+          onClick={() => onSetPaymentMethod('affirm')}
+        >
+          Affirm
+        </button>
+      </div>
+
+      <div className="gratuity-row">
+        <div className="gratuity-controls">
+          <button
+            type="button"
+            className="gratuity-button"
+            onClick={() => onToggleGratuityInput()}
+          >
+            {showGratuityInput ? 'Hide gratuity' : 'Add gratuity'}
+          </button>
+
+          {gratuityPercentageOptions.map((percentage) => (
+            <button
+              key={percentage}
+              type="button"
+              className="gratuity-preset"
+              onClick={() => onPresetGratuity(percentage, itemTotal)}
+            >
+              {percentage}%
+            </button>
+          ))}
+        </div>
+
+        {showGratuityInput && (
+          <label className="gratuity-input-group">
+            <span>Gratuity amount</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={gratuityInput}
+              onChange={(event) => onUpdateGratuityInput(event.target.value)}
+              placeholder="Enter amount"
+            />
+          </label>
+        )}
+      </div>
+
+      <div className="order-breakdown">
+        <div className="breakdown-title">
+          <span>Your order</span>
+          <span>{formatPrice(itemTotal)}</span>
+        </div>
+        <div className="breakdown-item">
+          <span>Sales tax ({(salesTaxRate * 100).toFixed(2)}%)</span>
+          <span>{formatPrice(taxAmount)}</span>
+        </div>
+        <div className="breakdown-item">
+          <span>Delivery fee</span>
+          <span>{formatPrice(isCarryout ? 0 : deliveryFee)}</span>
+        </div>
+        <div className="breakdown-item">
+          <span>Gratuity</span>
+          <span>{formatPrice(gratuityAmount)}</span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="primary checkout-button"
+        onClick={onPlaceOrder}
+        disabled={!paymentMethod}
+      >
+        Place order
+      </button>
+    </div>
+  )
+}
 
 function App() {
   const [cart, setCart] = useState([])
@@ -58,7 +465,7 @@ function App() {
   const [validationMessage, setValidationMessage] = useState('')
   const gratuityPercentageOptions = [5, 10, 15]
 
-  const addToCart = (pizza) => {
+  const addToCart = useCallback((pizza) => {
     setCart((current) => {
       const existing = current.find((item) => item.pizza.id === pizza.id)
       if (existing) {
@@ -72,7 +479,7 @@ function App() {
       return [
         ...current,
         {
-          id: `${pizza.id}-${Date.now()}`,
+          id: `${pizza.id}-${crypto.randomUUID()}`,
           pizza,
           size: 'medium',
           quantity: 1,
@@ -80,17 +487,17 @@ function App() {
         },
       ]
     })
-  }
+  }, [])
 
-  const updateItem = (id, changes) => {
+  const updateItem = useCallback((id, changes) => {
     setCart((current) =>
       current.map((item) => (item.id === id ? { ...item, ...changes } : item)),
     )
-  }
+  }, [])
 
-  const removeItem = (id) => {
+  const removeItem = useCallback((id) => {
     setCart((current) => current.filter((item) => item.id !== id))
-  }
+  }, [])
 
   const deliveryFee = 4
 
@@ -109,15 +516,9 @@ function App() {
     return 0.075
   }
 
+  // Keep summing logic in one helper so totals stay consistent in the cart, review modal, and order summary.
   const itemTotal = useMemo(() => {
-    return cart.reduce((total, item) => {
-      const base = item.pizza.price + sizeModifiers[item.size]
-      const toppingsTotal = item.toppings.reduce(
-        (sum, toppingId) => sum + (toppings.find((t) => t.id === toppingId)?.price || 0),
-        0,
-      )
-      return total + (base + toppingsTotal) * item.quantity
-    }, 0)
+    return cart.reduce((total, item) => total + getItemLineTotal(item), 0)
   }, [cart])
 
   const salesTaxRate = useMemo(() => getSalesTaxRate(address), [address])
@@ -161,7 +562,7 @@ function App() {
     return `Estimated ready in: ${estimatedWaitTime}`
   }, [estimatedWaitTime, isCarryout, totalPizzas])
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = useCallback(() => {
     if (!customerName || !phone || cart.length === 0 || (!isCarryout && !address)) {
       setValidationMessage('Please add at least one pizza and fill in your contact details.')
       return
@@ -174,9 +575,9 @@ function App() {
 
     setValidationMessage('')
     setShowOrderReview(true)
-  }
+  }, [address, cart.length, customerName, isCarryout, paymentMethod, phone])
 
-  const confirmOrder = () => {
+  const confirmOrder = useCallback(() => {
     setShowOrderReview(false)
     setShowSuccessMessage(true)
     setCart([])
@@ -188,7 +589,7 @@ function App() {
     setGratuityInput('')
     setShowGratuityInput(false)
     setValidationMessage('')
-  }
+  }, [])
 
   const paymentMethodLabel = {
     paypal: 'PayPal',
@@ -239,18 +640,7 @@ function App() {
 
           <div className="menu-list">
             {pizzaMenu.map((pizza) => (
-              <article key={pizza.id} className="menu-card">
-                <div>
-                  <h3>{pizza.name}</h3>
-                  <p className="menu-description">{pizza.description}</p>
-                </div>
-                <div className="card-footer">
-                  <span className="price">{formatPrice(pizza.price)}</span>
-                  <button type="button" onClick={() => addToCart(pizza)}>
-                    Add
-                  </button>
-                </div>
-              </article>
+              <MenuCard key={pizza.id} pizza={pizza} onAddToCart={addToCart} />
             ))}
           </div>
         </section>
@@ -266,345 +656,82 @@ function App() {
               <p className="empty-state">Start by adding a pizza from the menu.</p>
             )}
 
-            {cart.map((item) => {
-              const itemTotal =
-                (item.pizza.price + sizeModifiers[item.size]) * item.quantity +
-                item.toppings.reduce(
-                  (sum, toppingId) => sum + (toppings.find((t) => t.id === toppingId)?.price || 0),
-                  0,
-                ) * item.quantity
-
-              return (
-                <div key={item.id} className="cart-item">
-                  <div className="item-main">
-                    <div>
-                      <h3>{item.pizza.name}</h3>
-                      <p>{formatPrice(itemTotal)}</p>
-                    </div>
-                    <button type="button" className="remove" onClick={() => removeItem(item.id)}>
-                      Remove
-                    </button>
-                  </div>
-
-                  <div className="item-controls">
-                    <label>
-                      Size
-                      <select
-                        value={item.size}
-                        onChange={(event) => updateItem(item.id, { size: event.target.value })}
-                      >
-                        {Object.keys(sizeModifiers).map((size) => (
-                          <option key={size} value={size}>
-                            {size.charAt(0).toUpperCase() + size.slice(1)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label>
-                      Quantity
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          updateItem(item.id, { quantity: Number(event.target.value) || 1 })
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  <fieldset className="toppings-group">
-                    <legend>Extra toppings</legend>
-                    {toppings.map((topping) => (
-                      <label key={topping.id} className="topping-option">
-                        <input
-                          type="checkbox"
-                          checked={item.toppings.includes(topping.id)}
-                          onChange={(event) => {
-                            const selected = event.target.checked
-                            updateItem(item.id, {
-                              toppings: selected
-                                ? [...item.toppings, topping.id]
-                                : item.toppings.filter((id) => id !== topping.id),
-                            })
-                          }}
-                        />
-                        <span>{topping.label}</span>
-                        <small>{formatPrice(topping.price)}</small>
-                      </label>
-                    ))}
-                  </fieldset>
-                </div>
-              )
-            })}
+            {cart.map((item) => (
+              <CartItemCard
+                key={item.id}
+                item={item}
+                onUpdateItem={updateItem}
+                onRemoveItem={removeItem}
+              />
+            ))}
           </div>
 
-          <div className="summary-card">
-            <div className="summary-card-header">
-              <div>
-                <p className="summary-label">Order total</p>
-                <p className="summary-subtitle">
-                  {deliveryEstimate}
-                </p>
-              </div>
-              <strong>{formatPrice(orderTotal)}</strong>
-            </div>
-
-            <div className="order-type-toggle">
-              <button
-                type="button"
-                className={isCarryout ? 'toggle-pill' : 'toggle-pill active'}
-                onClick={() => setOrderType('delivery')}
-              >
-                Delivery
-              </button>
-              <span className="toggle-separator">OR</span>
-              <button
-                type="button"
-                className={isCarryout ? 'toggle-pill active' : 'toggle-pill'}
-                onClick={() => setOrderType('carryout')}
-              >
-                Carryout
-              </button>
-            </div>
-
-            <div className="checkout-form">
-              <label>
-                <span>Name</span>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(event) => {
-                    setCustomerName(event.target.value)
-                    setValidationMessage('')
-                  }}
-                  placeholder="Enter your name"
-                />
-              </label>
-              {!isCarryout && (
-                <label>
-                  <span>Delivery address</span>
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(event) => {
-                      setAddress(event.target.value)
-                      setValidationMessage('')
-                    }}
-                    placeholder="Enter delivery address"
-                  />
-                </label>
-              )}
-              <label>
-                <span>Phone</span>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(event) => {
-                    setPhone(event.target.value)
-                    setValidationMessage('')
-                  }}
-                  placeholder="(555) 555-1234"
-                />
-              </label>
-            </div>
-
-            {validationMessage && (
-              <div className="validation-banner" role="alert">
-                <span className="validation-title">Luigi's Pizzaria</span>
-                <span>{validationMessage}</span>
-              </div>
-            )}
-
-            <div className="payment-method-toggle">
-              <button
-                type="button"
-                className={paymentMethod === 'paypal' ? 'payment-pill active' : 'payment-pill'}
-                onClick={() => setPaymentMethod('paypal')}
-              >
-                PayPal
-              </button>
-              <button
-                type="button"
-                className={paymentMethod === 'credit' ? 'payment-pill active' : 'payment-pill'}
-                onClick={() => setPaymentMethod('credit')}
-              >
-                Credit card
-              </button>
-              <button
-                type="button"
-                className={paymentMethod === 'affirm' ? 'payment-pill active' : 'payment-pill'}
-                onClick={() => setPaymentMethod('affirm')}
-              >
-                Affirm
-              </button>
-            </div>
-
-            <div className="gratuity-row">
-              <div className="gratuity-controls">
-                <button
-                  type="button"
-                  className="gratuity-button"
-                  onClick={() => setShowGratuityInput((current) => !current)}
-                >
-                  {showGratuityInput ? 'Hide gratuity' : 'Add gratuity'}
-                </button>
-
-                {gratuityPercentageOptions.map((percentage) => (
-                  <button
-                    key={percentage}
-                    type="button"
-                    className="gratuity-preset"
-                    onClick={() => {
-                      setShowGratuityInput(true)
-                      setGratuityInput((itemTotal * (percentage / 100)).toFixed(2))
-                    }}
-                  >
-                    {percentage}%
-                  </button>
-                ))}
-              </div>
-
-              {showGratuityInput && (
-                <label className="gratuity-input-group">
-                  <span>Gratuity amount</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={gratuityInput}
-                    onChange={(event) => setGratuityInput(event.target.value)}
-                    placeholder="Enter amount"
-                  />
-                </label>
-              )}
-            </div>
-
-            <div className="order-breakdown">
-              <div className="breakdown-title">
-                <span>Your order</span>
-                <span>{formatPrice(itemTotal)}</span>
-              </div>
-              <div className="breakdown-item">
-                <span>Sales tax ({(salesTaxRate * 100).toFixed(2)}%)</span>
-                <span>{formatPrice(taxAmount)}</span>
-              </div>
-              <div className="breakdown-item">
-                <span>Delivery fee</span>
-                <span>{formatPrice(isCarryout ? 0 : deliveryFee)}</span>
-              </div>
-              <div className="breakdown-item">
-                <span>Gratuity</span>
-                <span>{formatPrice(gratuityAmount)}</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="primary checkout-button"
-              onClick={handlePlaceOrder}
-              disabled={!paymentMethod}
-            >
-              Place order
-            </button>
-          </div>
+          <OrderSummaryCard
+            customerName={customerName}
+            address={address}
+            phone={phone}
+            orderType={orderType}
+            paymentMethod={paymentMethod}
+            showGratuityInput={showGratuityInput}
+            gratuityInput={gratuityInput}
+            validationMessage={validationMessage}
+            gratuityPercentageOptions={gratuityPercentageOptions}
+            itemTotal={itemTotal}
+            salesTaxRate={salesTaxRate}
+            taxAmount={taxAmount}
+            gratuityAmount={gratuityAmount}
+            deliveryFee={deliveryFee}
+            orderTotal={orderTotal}
+            deliveryEstimate={deliveryEstimate}
+            isCarryout={isCarryout}
+            onUpdateCustomerName={(value) => {
+              setCustomerName(value)
+              setValidationMessage('')
+            }}
+            onUpdateAddress={(value) => {
+              setAddress(value)
+              setValidationMessage('')
+            }}
+            onUpdatePhone={(value) => {
+              setPhone(value)
+              setValidationMessage('')
+            }}
+            onSetOrderType={(value) => setOrderType(value)}
+            onSetPaymentMethod={(value) => setPaymentMethod(value)}
+            onToggleGratuityInput={() => setShowGratuityInput((current) => !current)}
+            onPresetGratuity={(percentage, subtotal) => {
+              setShowGratuityInput(true)
+              setGratuityInput((subtotal * (percentage / 100)).toFixed(2))
+            }}
+            onUpdateGratuityInput={(value) => setGratuityInput(value)}
+            onPlaceOrder={handlePlaceOrder}
+          />
         </section>
       </section>
 
       {showOrderReview && (
-        <div className="review-modal-backdrop" role="presentation">
-          <div className="review-modal" role="dialog" aria-modal="true">
-            <div className="review-modal-header">
-              <div>
-                <p className="eyebrow">Review order</p>
-                <h2>Please verify your details</h2>
-              </div>
-              <button type="button" className="review-close" onClick={() => setShowOrderReview(false)}>
-                ×
-              </button>
-            </div>
-
-            <div className="review-sections">
-              <section>
-                <h3>Customer</h3>
-                <p>{customerName || 'No name provided'}</p>
-                <p>{phone || 'No phone provided'}</p>
-                {!isCarryout && <p>{address || 'No address provided'}</p>}
-              </section>
-
-              <section>
-                <h3>Order</h3>
-                <div className="review-items">
-                  {cart.map((item) => (
-                    <div key={item.id} className="review-item">
-                      <div>
-                        <strong>{item.quantity} × {item.pizza.name}</strong>
-                        <p>{item.size} size</p>
-                        {item.toppings.length > 0 && (
-                          <p>{item.toppings.map((toppingId) => toppings.find((t) => t.id === toppingId)?.label).join(', ')}</p>
-                        )}
-                      </div>
-                      <span>{formatPrice((item.pizza.price + sizeModifiers[item.size]) * item.quantity)}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <h3>Payment</h3>
-                <p>{paymentMethodLabel}</p>
-                <p>{isCarryout ? 'Carryout' : 'Delivery'}</p>
-              </section>
-
-              <section>
-                <h3>Totals</h3>
-                <div className="review-total-row">
-                  <span>Items</span>
-                  <span>{formatPrice(itemTotal)}</span>
-                </div>
-                <div className="review-total-row">
-                  <span>Sales tax</span>
-                  <span>{formatPrice(taxAmount)}</span>
-                </div>
-                <div className="review-total-row">
-                  <span>Delivery fee</span>
-                  <span>{formatPrice(isCarryout ? 0 : deliveryFee)}</span>
-                </div>
-                <div className="review-total-row">
-                  <span>Gratuity</span>
-                  <span>{formatPrice(gratuityAmount)}</span>
-                </div>
-                <div className="review-total-row total">
-                  <span>Order total</span>
-                  <span>{formatPrice(orderTotal)}</span>
-                </div>
-              </section>
-            </div>
-
-            <div className="review-actions">
-              <button type="button" className="secondary review-cancel" onClick={() => setShowOrderReview(false)}>
-                Back
-              </button>
-              <button type="button" className="primary review-confirm" onClick={confirmOrder}>
-                Confirm
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReviewModal
+          customerName={customerName}
+          phone={phone}
+          address={address}
+          isCarryout={isCarryout}
+          cart={cart}
+          itemTotal={itemTotal}
+          taxAmount={taxAmount}
+          deliveryFee={deliveryFee}
+          gratuityAmount={gratuityAmount}
+          orderTotal={orderTotal}
+          paymentMethodLabel={paymentMethodLabel}
+          onClose={() => setShowOrderReview(false)}
+          onConfirm={confirmOrder}
+        />
       )}
 
       {showSuccessMessage && (
-        <div className="review-modal-backdrop" role="presentation">
-          <div className="success-modal" role="dialog" aria-modal="true">
-            <p className="eyebrow">Luigi's Pizzaria</p>
-            <h2>Thank you!</h2>
-            <p className="success-message">Your order will be ready in {estimatedWaitTime}.</p>
-            <button type="button" className="primary" onClick={() => setShowSuccessMessage(false)}>
-              Done
-            </button>
-          </div>
-        </div>
+        <SuccessModal
+          estimatedWaitTime={estimatedWaitTime}
+          onClose={() => setShowSuccessMessage(false)}
+        />
       )}
     </main>
   )
