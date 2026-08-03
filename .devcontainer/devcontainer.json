@@ -1,0 +1,13 @@
+{
+  "name": "Luigi's Pizzaria - Node Dev Container",
+  "image": "mcr.microsoft.com/vscode/devcontainers/javascript-node:20",
+  "forwardPorts": [5173],
+  "postStartCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode-remote.remote-containers"
+      ]
+    }
+  }
+}
