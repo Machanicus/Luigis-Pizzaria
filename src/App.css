@@ -276,6 +276,8 @@
   border: 1px dashed var(--border);
   border-radius: 18px;
   text-align: center;
+  background: rgba(213, 127, 44, 0.06);
+  font-weight: 600;
 }
 
 .summary-card {

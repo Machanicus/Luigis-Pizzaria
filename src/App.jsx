@@ -503,7 +503,7 @@ function OrderSummaryCard({
         onClick={onPlaceOrder}
         disabled={!paymentMethod}
       >
-        Place order
+        Review order
       </button>
     </div>
   )
@@ -854,7 +854,9 @@ function App() {
 
           <div className="cart-list">
             {cart.length === 0 && (
-              <p className="empty-state">Start by adding a pizza from the menu.</p>
+              <p className="empty-state">
+                Start by adding a pizza from the menu to begin your order.
+              </p>
             )}
 
             {cart.map((item) => (
