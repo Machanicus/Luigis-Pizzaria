@@ -466,27 +466,16 @@ function App() {
   const gratuityPercentageOptions = [5, 10, 15]
 
   const addToCart = useCallback((pizza) => {
-    setCart((current) => {
-      const existing = current.find((item) => item.pizza.id === pizza.id)
-      if (existing) {
-        return current.map((item) =>
-          item.pizza.id === pizza.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        )
-      }
-
-      return [
-        ...current,
-        {
-          id: `${pizza.id}-${crypto.randomUUID()}`,
-          pizza,
-          size: 'medium',
-          quantity: 1,
-          toppings: [],
-        },
-      ]
-    })
+    setCart((current) => [
+     ...current,
+     {
+       id: `${pizza.id}-${crypto.randomUUID()}`,
+       pizza,
+       size: 'medium',
+       quantity: 1,
+       toppings: [],
+     },
+   ])
   }, [])
 
   const updateItem = useCallback((id, changes) => {
