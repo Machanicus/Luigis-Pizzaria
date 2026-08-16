@@ -45,6 +45,8 @@ const toppings = [
 ]
 
 const formatPrice = (value) => `$${Number(value).toFixed(2)}`
+const PROMO_CODE = 'LUIGI15'
+const PROMO_DISCOUNT_RATE = 0.15
 
 const toppingPriceLookup = new Map(toppings.map((topping) => [topping.id, topping.price]))
 const toppingLabelLookup = new Map(toppings.map((topping) => [topping.id, topping.label]))
@@ -156,6 +158,8 @@ function ReviewModal({
   taxAmount,
   deliveryFee,
   gratuityAmount,
+  discountAmount,
+  promoApplied,
   orderTotal,
   paymentMethodLabel,
   onClose,
@@ -228,6 +232,12 @@ function ReviewModal({
               <span>Gratuity</span>
               <span>{formatPrice(gratuityAmount)}</span>
             </div>
+            {promoApplied && (
+              <div className="review-total-row promo-discount">
+                <span>Promo Luigi15 (15%)</span>
+                <span>-{formatPrice(discountAmount)}</span>
+             </div>
+            )}
             <div className="review-total-row total">
               <span>Order total</span>
               <span>{formatPrice(orderTotal)}</span>
@@ -278,6 +288,10 @@ function OrderSummaryCard({
   taxAmount,
   gratuityAmount,
   deliveryFee,
+  promoCode,
+  promoApplied,
+  promoMessage,
+  discountAmount,
   orderTotal,
   deliveryEstimate,
   estimatedWaitTime,
@@ -290,6 +304,8 @@ function OrderSummaryCard({
   onToggleGratuityInput,
   onPresetGratuity,
   onUpdateGratuityInput,
+  onUpdatePromoCode,
+  onApplyPromoCode,
   onPlaceOrder,
 }) {
   return (
@@ -419,7 +435,37 @@ function OrderSummaryCard({
           </label>
         )}
       </div>
+      <div className="promo-section">
+        <label className="promo-input-group">
+         <span>Promo code</span>
 
+         <div className="promo-controls">
+            <input
+             type="text"
+             value={promoCode}
+             onChange={(event) => onUpdatePromoCode(event.target.value)}
+             placeholder="Enter promo code"
+             disabled={promoApplied}
+            />
+
+            <button
+              type="button"
+              className="promo-button"
+              onClick={onApplyPromoCode}
+              disabled={promoApplied}
+           >
+             {promoApplied ? 'Applied' : 'Apply'}
+           </button>
+         </div>
+       </label>
+
+       {promoMessage && (
+         <p className={promoApplied ? 'promo-message success' : 'promo-message'}>
+           {promoMessage}
+         </p>
+       )}
+      </div>
+      
       <div className="order-breakdown">
         <div className="breakdown-title">
           <span>Your order</span>
@@ -437,7 +483,13 @@ function OrderSummaryCard({
           <span>Gratuity</span>
           <span>{formatPrice(gratuityAmount)}</span>
         </div>
-      </div>
+       {promoApplied && (
+        <div className="breakdown-item promo-discount">
+          <span>Promo Luigi15 (15%)</span>
+          <span>-{formatPrice(discountAmount)}</span>
+        </div>
+       )}
+      </div>  
 
       <button
         type="button"
@@ -463,6 +515,9 @@ function App() {
   const [showOrderReview, setShowOrderReview] = useState(false)
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
   const [validationMessage, setValidationMessage] = useState('')
+  const [promoCode, setPromoCode] = useState('')
+  const [promoApplied, setPromoApplied] = useState(false)
+  const [promoMessage, setPromoMessage] = useState('')
   const gratuityPercentageOptions = [5, 10, 15]
 
   const addToCart = useCallback((pizza) => {
@@ -514,9 +569,20 @@ function App() {
   const taxAmount = useMemo(() => itemTotal * salesTaxRate, [itemTotal, salesTaxRate])
   const gratuityAmount = useMemo(() => Math.max(0, Number(gratuityInput) || 0), [gratuityInput])
   const isCarryout = orderType === 'carryout'
-  const orderTotal = useMemo(
+
+  const preDiscountTotal = useMemo(
     () => itemTotal + taxAmount + (isCarryout ? 0 : deliveryFee) + gratuityAmount,
     [itemTotal, taxAmount, isCarryout, deliveryFee, gratuityAmount],
+  )
+
+  const discountAmount = useMemo(
+    () => (promoApplied ? preDiscountTotal * PROMO_DISCOUNT_RATE : 0),
+    [preDiscountTotal, promoApplied],
+  )
+
+  const orderTotal = useMemo(
+    () => Math.max(0, preDiscountTotal - discountAmount),
+    [preDiscountTotal, discountAmount],
   )
 
   const totalPizzas = useMemo(
@@ -550,6 +616,20 @@ function App() {
 
     return `Estimated ready in: ${estimatedWaitTime}`
   }, [estimatedWaitTime, isCarryout, totalPizzas])
+  
+  const handleApplyPromoCode = useCallback(() => {
+    const normalizedCode = promoCode.trim().toUpperCase()
+
+    if (normalizedCode === PROMO_CODE) {
+     setPromoApplied(true)
+     setPromoCode('Luigi15')
+     setPromoMessage('Luigi15 applied — 15% off your entire order!')
+     return
+   }
+
+    setPromoApplied(false)
+    setPromoMessage('Promo code not recognized. Please try again.')
+  }, [promoCode])
 
   const handlePlaceOrder = useCallback(() => {
     if (!customerName || !phone || cart.length === 0 || (!isCarryout && !address)) {
@@ -577,6 +657,9 @@ function App() {
     setPaymentMethod('')
     setGratuityInput('')
     setShowGratuityInput(false)
+    setPromoCode('')
+    setPromoApplied(false)
+    setPromoMessage('')
     setValidationMessage('')
   }, [])
 
@@ -670,6 +753,10 @@ function App() {
             taxAmount={taxAmount}
             gratuityAmount={gratuityAmount}
             deliveryFee={deliveryFee}
+            promoCode={promoCode}
+            promoApplied={promoApplied}
+            promoMessage={promoMessage}
+            discountAmount={discountAmount}
             orderTotal={orderTotal}
             deliveryEstimate={deliveryEstimate}
             isCarryout={isCarryout}
@@ -693,6 +780,11 @@ function App() {
               setGratuityInput((subtotal * (percentage / 100)).toFixed(2))
             }}
             onUpdateGratuityInput={(value) => setGratuityInput(value)}
+            onUpdatePromoCode={(value) => {
+             setPromoCode(value)
+             setPromoMessage('')
+           }}
+            onApplyPromoCode={handleApplyPromoCode}
             onPlaceOrder={handlePlaceOrder}
           />
         </section>
@@ -709,6 +801,8 @@ function App() {
           taxAmount={taxAmount}
           deliveryFee={deliveryFee}
           gratuityAmount={gratuityAmount}
+          discountAmount={discountAmount}
+          promoApplied={promoApplied}
           orderTotal={orderTotal}
           paymentMethodLabel={paymentMethodLabel}
           onClose={() => setShowOrderReview(false)}
