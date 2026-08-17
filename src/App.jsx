@@ -543,6 +543,12 @@ function App() {
     setCart((current) => current.filter((item) => item.id !== id))
   }, [])
 
+  const clearCart = useCallback(() => {
+    if (window.confirm('Are you sure you want to clear your cart?')) {
+      setCart([])
+    }
+  }, [])
+
   const deliveryFee = 4
 
   const getSalesTaxRate = (addressValue) => {
@@ -719,8 +725,14 @@ function App() {
 
         <section className="cart-panel">
           <div className="panel-header">
-            <h2>Your order</h2>
+           <h2>Your order</h2>
             <p>{cart.length ? `${cart.length} item(s) in cart` : 'Cart is empty'}</p>
+
+            {cart.length > 0 && (
+              <button type="button" onClick={clearCart}>
+                Clear Cart
+              </button>
+           )}
           </div>
 
           <div className="cart-list">
