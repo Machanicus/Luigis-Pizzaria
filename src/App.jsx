@@ -514,6 +514,7 @@ function App() {
   const [gratuityInput, setGratuityInput] = useState('')
   const [showOrderReview, setShowOrderReview] = useState(false)
   const [showSuccessMessage, setShowSuccessMessage] = useState(false)
+  const [finalWaitTime, setFinalWaitTime] = useState('')
   const [validationMessage, setValidationMessage] = useState('')
   const [promoCode, setPromoCode] = useState('')
   const [promoApplied, setPromoApplied] = useState(false)
@@ -597,31 +598,28 @@ function App() {
   )
 
   const estimatedWaitTime = useMemo(() => {
-    if (isCarryout || totalPizzas === 0) {
-      return '14–21 mins'
+    if (totalPizzas === 0) {
+      return isCarryout ? '14–21 mins' : '18–26 mins'
     }
 
     const baseMin = Math.max(20 + totalPizzas * 4, 25)
     const baseMax = baseMin + 10 + Math.min(totalPizzas * 3, 20)
     const randomShift = Math.floor(Math.random() * 4)
 
-    const minTime = Math.max(18, Math.round((baseMin + randomShift) * 0.7))
-    const maxTime = Math.max(minTime + 4, Math.round((baseMax + randomShift) * 0.7))
+    let minTime = Math.max(18, Math.round((baseMin + randomShift) * 0.7))
+    let maxTime = Math.max(minTime + 4, Math.round((baseMax + randomShift) * 0.7))
+
+    if (isCarryout) {
+      minTime = Math.max(14, minTime - 4)
+      maxTime = Math.max(minTime + 4, maxTime - 4)
+    }
 
     return `${minTime}–${maxTime} mins`
   }, [isCarryout, totalPizzas])
 
   const deliveryEstimate = useMemo(() => {
-    if (totalPizzas === 0) {
-      return isCarryout ? 'Estimated ready in: 14–21 mins' : 'Estimated ready in: 18–26 mins'
-    }
-
-    if (isCarryout) {
-      return 'Estimated ready in: 14–21 mins'
-    }
-
     return `Estimated ready in: ${estimatedWaitTime}`
-  }, [estimatedWaitTime, isCarryout, totalPizzas])
+  }, [estimatedWaitTime])
   
   const handleApplyPromoCode = useCallback(() => {
     const normalizedCode = promoCode.trim().toUpperCase()
@@ -655,6 +653,7 @@ function App() {
   const confirmOrder = useCallback(() => {
     setShowOrderReview(false)
     setShowSuccessMessage(true)
+    setFinalWaitTime(estimatedWaitTime)
     setCart([])
     setCustomerName('')
     setAddress('')
@@ -667,7 +666,7 @@ function App() {
     setPromoApplied(false)
     setPromoMessage('')
     setValidationMessage('')
-  }, [])
+  }, [estimatedWaitTime])
 
   const paymentMethodLabel = {
     paypal: 'PayPal',
@@ -824,7 +823,7 @@ function App() {
 
       {showSuccessMessage && (
         <SuccessModal
-          estimatedWaitTime={estimatedWaitTime}
+          estimatedWaitTime={finalWaitTime}
           onClose={() => setShowSuccessMessage(false)}
         />
       )}
