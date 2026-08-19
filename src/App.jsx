@@ -45,6 +45,19 @@ const toppings = [
 ]
 
 const formatPrice = (value) => `$${Number(value).toFixed(2)}`
+const formatPhoneNumber = (value) => {
+  const numbers = value.replace(/\D/g, '').slice(0, 10)
+
+  if (numbers.length <= 3) {
+    return numbers
+  }
+
+  if (numbers.length <= 6) {
+    return `(${numbers.slice(0, 3)})${numbers.slice(3)}`
+  }
+
+  return `(${numbers.slice(0, 3)})${numbers.slice(3, 6)}-${numbers.slice(6)}`
+}
 const PROMO_CODE = 'LUIGI15'
 const PROMO_DISCOUNT_RATE = 0.15
 
@@ -362,7 +375,7 @@ function OrderSummaryCard({
           <input
             type="tel"
             value={phone}
-            onChange={(event) => onUpdatePhone(event.target.value)}
+            onChange={(event) => onUpdatePhone(formatPhoneNumber(event.target.value))}
             placeholder="(555) 555-1234"
           />
         </label>
