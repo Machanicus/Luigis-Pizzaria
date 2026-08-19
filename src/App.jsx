@@ -288,7 +288,11 @@ function SuccessModal({ estimatedWaitTime, onClose }) {
 
 function OrderSummaryCard({
   customerName,
-  address,
+  address1,
+  address2,
+  city,
+  state,
+  zipCode,
   phone,
   orderType,
   paymentMethod,
@@ -310,7 +314,11 @@ function OrderSummaryCard({
   estimatedWaitTime,
   isCarryout,
   onUpdateCustomerName,
-  onUpdateAddress,
+  onUpdateAddress1,
+  onUpdateAddress2,
+  onUpdateCity,
+  onUpdateState,
+  onUpdateZipCode,
   onUpdatePhone,
   onSetOrderType,
   onSetPaymentMethod,
@@ -360,16 +368,63 @@ function OrderSummaryCard({
           />
         </label>
         {!isCarryout && (
-          <label>
-            <span>Delivery address</span>
-            <input
-              type="text"
-              value={address}
-              onChange={(event) => onUpdateAddress(event.target.value)}
-              placeholder="Enter delivery address"
-            />
-          </label>
+          <>
+            <label>
+             <span>Address Line 1</span>
+              <input
+                type="text"
+                value={address1}
+                onChange={(event) => onUpdateAddress1(event.target.value)}
+                placeholder="123 Main Street"
+              />
+            </label>
+
+            <label>
+              <span>Address Line 2 (optional)</span>
+              <input
+                type="text"
+                value={address2}
+                onChange={(event) => onUpdateAddress2(event.target.value)}
+                placeholder="Apt, suite, or unit"
+              />
+            </label>
+
+            <label>     
+              <span>City</span>
+              <input
+                type="text"
+                value={city}
+                onChange={(event) => onUpdateCity(event.target.value)}
+                placeholder="Fort Collins"
+              />
+            </label>
+
+            <label>
+              <span>State</span>
+              <input
+                type="text"
+                value={state}
+                onChange={(event) => onUpdateState(event.target.value)}
+                placeholder="CO"
+                maxLength={2}
+              />
+            </label>
+
+            <label>
+              <span>ZIP Code</span>
+              <input
+                type="text"
+                value={zipCode}
+                onChange={(event) =>
+                  onUpdateZipCode(event.target.value.replace(/\D/g, '').slice(0, 5))
+                }
+                placeholder="80525"
+                inputMode="numeric"
+              />
+            </label>
+          </>
         )}
+
         <label>
           <span>Phone</span>
           <input
@@ -519,7 +574,11 @@ function OrderSummaryCard({
 function App() {
   const [cart, setCart] = useState([])
   const [customerName, setCustomerName] = useState('')
-  const [address, setAddress] = useState('')
+  const [address1, setAddress1] = useState('')
+  const [address2, setAddress2] = useState('')
+  const [city, setCity] = useState('')
+  const [state, setState] = useState('')
+  const [zipCode, setZipCode] = useState('')
   const [phone, setPhone] = useState('')
   const [orderType, setOrderType] = useState('delivery')
   const [paymentMethod, setPaymentMethod] = useState('')
@@ -584,6 +643,16 @@ function App() {
   const itemTotal = useMemo(() => {
     return cart.reduce((total, item) => total + getItemLineTotal(item), 0)
   }, [cart])
+  
+  const address = [
+    address1,
+    address2,
+    city,
+    state,
+    zipCode,
+ ]
+    .filter(Boolean)
+    .join(', ')
 
   const salesTaxRate = useMemo(() => getSalesTaxRate(address), [address])
   const taxAmount = useMemo(() => itemTotal * salesTaxRate, [itemTotal, salesTaxRate])
@@ -764,7 +833,11 @@ function App() {
 
           <OrderSummaryCard
             customerName={customerName}
-            address={address}
+            address1={address1}
+            address2={address2}
+            city={city}
+            state={state}
+            zipCode={zipCode}
             phone={phone}
             orderType={orderType}
             paymentMethod={paymentMethod}
@@ -788,8 +861,24 @@ function App() {
               setCustomerName(value)
               setValidationMessage('')
             }}
-            onUpdateAddress={(value) => {
-              setAddress(value)
+            onUpdateAddress1={(value) => {
+              setAddress1(value)
+              setValidationMessage('')
+            }}
+            onUpdateAddress2={(value) => {
+              setAddress2(value)
+              setValidationMessage('')
+            }}
+            onUpdateCity={(value) => {
+              setCity(value)
+              setValidationMessage('')
+            }}
+            onUpdateState={(value) => {
+              setState(value.toUpperCase())
+              setValidationMessage('')
+            }}
+            onUpdateZipCode={(value) => {
+              setZipCode(value)
               setValidationMessage('')
             }}
             onUpdatePhone={(value) => {
